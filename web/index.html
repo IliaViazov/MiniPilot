@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MiniPilot</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg:      #0a0a0a;
+    --surface: #111111;
+    --border:  #222222;
+    --dim:     #333333;
+    --muted:   #555555;
+    --text:    #cccccc;
+    --hi:      #e8e8e8;
+    --accent:  #00ff88;
+    --warn:    #ff4444;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── header ── */
+  #header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  #header h1 { font-size: 13px; font-weight: 600; color: var(--hi); letter-spacing: 0.1em; margin-right: 4px; }
+
+  .header-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .header-group label { color: var(--muted); white-space: nowrap; }
+
+  select, input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--dim);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  select:focus, input[type="number"]:focus { border-color: var(--accent); }
+  select option { background: var(--bg); }
+  input[type="number"] { width: 60px; }
+
+  .apply-btn {
+    background: none;
+    border: 1px solid var(--dim);
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .apply-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  #ws-indicator {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  #ws-indicator.ok  { color: var(--accent); }
+  #ws-indicator.err { color: var(--warn); }
+
+  /* ── main ── */
+  #app { display: flex; flex: 1; overflow: hidden; }
+
+  #channels {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    gap: 4px;
+  }
+
+  .channel {
+    display: grid;
+    grid-template-columns: 22px 30px 100px 50px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    transition: border-color 0.1s;
+  }
+  .channel.playing { border-color: var(--accent); }
+
+  .ch-id   { font-weight: 600; color: var(--muted); font-size: 10px; text-align: center; }
+  .ch-note { font-weight: 600; color: var(--hi); font-size: 11px; min-width: 30px; }
+  .ch-env  { display: flex; gap: 3px; align-items: center; }
+  .env-bar { height: 16px; background: var(--dim); flex: 1; border-radius: 1px; position: relative; overflow: hidden; }
+  .env-bar-fill { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent); opacity: 0.5; transition: height 0.05s; }
+  .env-label { color: var(--muted); font-size: 9px; }
+  .ch-type { color: var(--muted); font-size: 10px; text-align: right; }
+  .ch-wave { height: 24px; }
+  canvas.wave { width: 100%; height: 24px; display: block; opacity: 0.7; }
+
+  /* ── effects ── */
+  #effects {
+    width: 180px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 10px 8px;
+    gap: 6px;
+  }
+  #effects h2 { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+
+  .effect { display: flex; flex-direction: column; gap: 3px; }
+  .effect-header { display: flex; justify-content: space-between; align-items: center; }
+  .effect-id  { font-weight: 600; color: var(--hi); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .effect-val { color: var(--muted); font-size: 9px; }
+  .effect-bars { display: flex; gap: 3px; height: 6px; }
+  .effect-bar  { flex: 1; background: var(--dim); border-radius: 1px; position: relative; overflow: hidden; }
+  .effect-bar-fill { position: absolute; top: 0; left: 0; bottom: 0; background: var(--accent); opacity: 0.6; transition: width 0.1s; }
+
+  /* ── log ── */
+  #log {
+    height: 72px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: #070707;
+    overflow-y: auto;
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 2px;
+  }
+  .log-line      { color: var(--muted); font-size: 10px; }
+  .log-line.note { color: var(--text); }
+  .log-line.fx   { color: #4488ff; }
+  .log-line.err  { color: var(--warn); }
+  .log-line.sys  { color: var(--accent); }
+
+  /* ── overlay ── */
+  #overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px; z-index: 100;
+  }
+  #overlay h1 { font-size: 24px; color: var(--hi); letter-spacing: 0.2em; }
+  #overlay p  { color: var(--muted); font-size: 11px; max-width: 340px; text-align: center; line-height: 1.8; }
+
+  .overlay-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 280px;
+  }
+  .overlay-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .overlay-row label { white-space: nowrap; }
+  .overlay-row select,
+  .overlay-row input[type="number"] { flex: 1; }
+
+  #start-btn {
+    background: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 10px 32px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    transition: background 0.2s;
+    margin-top: 6px;
+  }
+  #start-btn:hover     { background: var(--accent); color: var(--bg); }
+  #start-btn:disabled  { opacity: 0.4; cursor: default; }
+  #loading-msg { color: var(--muted); font-size: 10px; min-height: 14px; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ── Overlay ── -->
+<div id="overlay">
+  <h1>MINIPILOT</h1>
+  <p>Tone.js synthesizer · MIDI + UDP</p>
+
+  <div class="overlay-settings">
+    <div class="overlay-row">
+      <label>MIDI INPUT</label>
+      <select id="midi-select-overlay"><option value="">— scanning… —</option></select>
+    </div>
+    <div class="overlay-row">
+      <label>UDP PORT</label>
+      <input type="number" id="udp-port-overlay" value="49161" min="1025" max="65534">
+    </div>
+  </div>
+
+  <button id="start-btn">START</button>
+  <div id="loading-msg"></div>
+</div>
+
+<!-- ── Header ── -->
+<div id="header">
+  <h1>MINIPILOT</h1>
+
+  <div class="header-group">
+    <label>MIDI</label>
+    <select id="midi-select-header"><option value="">no device</option></select>
+  </div>
+
+  <div class="header-group">
+    <label>UDP</label>
+    <input type="number" id="udp-port-header" value="49161" min="1025" max="65534">
+    <button class="apply-btn" id="udp-apply">apply</button>
+  </div>
+
+  <div id="ws-indicator">bridge: connecting…</div>
+</div>
+
+<div id="app">
+  <div id="channels"></div>
+  <div id="effects"><h2>EFFECTS · UDP</h2></div>
+</div>
+
+<div id="log"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script>
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const B36   = '0123456789abcdefghijklmnopqrstuvwxyz'
+const int36 = s => B36.indexOf(`${s}`.toLowerCase())
+const str36 = n => B36[Math.floor(n)] ?? '0'
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v
+const OCTAVE_MAP = ['C','c','D','d','E','F','f','G','g','A','a','B']
+
+function midiToName(midi) {
+  const oct   = Math.floor(midi / 12) - 1
+  const note  = OCTAVE_MAP[midi % 12]
+  const sharp = (note === note.toLowerCase() && note !== note.toUpperCase()) ? '#' : ''
+  return `${note.toUpperCase()}${sharp}${oct}`
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+const logEl = document.getElementById('log')
+function log(msg, cls = '') {
+  const d = document.createElement('div')
+  d.className = `log-line ${cls}`
+  d.textContent = msg
+  logEl.prepend(d)
+  if (logEl.children.length > 80) logEl.lastChild.remove()
+}
+
+// ── Channel definitions ───────────────────────────────────────────────────────
+const channels = []
+
+const CHANNEL_DEFS = [
+  { type:'AM', node: () => new Tone.AMSynth({ harmonicity:1.25, oscillator:{type:'sine8'},     modulation:{type:'sine'}      }) },
+  { type:'AM', node: () => new Tone.AMSynth({ harmonicity:1.5,  oscillator:{type:'triangle8'}, modulation:{type:'sawtooth'}  }) },
+  { type:'AM', node: () => new Tone.AMSynth({ harmonicity:1.75, oscillator:{type:'sawtooth8'}, modulation:{type:'triangle'}  }) },
+  { type:'AM', node: () => new Tone.AMSynth({ harmonicity:2,    oscillator:{type:'square8'},   modulation:{type:'square'}    }) },
+  { type:'AM', node: () => new Tone.AMSynth({ harmonicity:1.25, oscillator:{type:'sine4'},     modulation:{type:'square8'}   }) },
+  { type:'AM', node: () => new Tone.AMSynth({ harmonicity:1.5,  oscillator:{type:'triangle4'}, modulation:{type:'sawtooth8'} }) },
+  { type:'FM', node: () => new Tone.FMSynth({ harmonicity:1.75, modulationIndex:10, oscillator:{type:'sawtooth4'}, modulation:{type:'triangle8'} }) },
+  { type:'FM', node: () => new Tone.FMSynth({ harmonicity:2,    modulationIndex:20, oscillator:{type:'square4'},   modulation:{type:'sine8'}     }) },
+  { type:'FM', node: () => new Tone.FMSynth({ harmonicity:0.5,  modulationIndex:30, oscillator:{type:'sine'},      modulation:{type:'sawtooth4'} }) },
+  { type:'FM', node: () => new Tone.FMSynth({ harmonicity:2.5,  modulationIndex:40, oscillator:{type:'sine'},      modulation:{type:'triangle8'} }) },
+  { type:'MN', node: () => new Tone.MonoSynth({ volume:-20, oscillator:{type:'sawtooth4'} }) },
+  { type:'MN', node: () => new Tone.MonoSynth({ volume:-20, oscillator:{type:'sine4'}     }) },
+  { type:'MB', node: () => new Tone.MembraneSynth({ octaves:5,  oscillator:{type:'sine'}     }) },
+  { type:'MB', node: () => new Tone.MembraneSynth({ octaves:10, oscillator:{type:'sawtooth'} }) },
+  { type:'MB', node: () => new Tone.MembraneSynth({ octaves:15, oscillator:{type:'triangle'} }) },
+  { type:'MB', node: () => new Tone.MembraneSynth({ octaves:20, oscillator:{type:'square'}   }) },
+]
+
+// ── Effects chain ─────────────────────────────────────────────────────────────
+let effectChain = {}
+
+function buildEffects() {
+  effectChain = {
+    bit: new Tone.BitCrusher(4),
+    dis: new Tone.Distortion(0.05),
+    wah: new Tone.AutoWah(100, 6, 0),
+    che: new Tone.Chebyshev(50),
+    fee: new Tone.FeedbackDelay(0),
+    del: new Tone.PingPongDelay('4n', 0.2),
+    tre: new Tone.Tremolo(),
+    rev: new Tone.JCReverb(0),
+    pha: new Tone.Phaser(0.5, 3, 350),
+    vib: new Tone.Vibrato(),
+    cho: new Tone.Chorus(4, 2.5, 0.5),
+    ste: new Tone.StereoWidener(0.5),
+    equ: new Tone.EQ3(5, 0, 5),
+    com: new Tone.Compressor(-6, 4),
+    vol: new Tone.Volume(6),
+    lim: new Tone.Limiter(-2),
+  }
+  for (const fx of Object.values(effectChain)) {
+    if (fx.wet) fx.wet.value = 0
+  }
+  const order = ['bit','dis','wah','che','fee','del','tre','rev','pha','vib','cho','ste','equ','com','vol','lim']
+  for (let i = 0; i < order.length - 1; i++) {
+    effectChain[order[i]].connect(effectChain[order[i + 1]])
+  }
+  effectChain.lim.toDestination()
+  return order
+}
+
+function applyDefaultEnv(ch, id) {
+  if (!ch.node.envelope) return
+  ch.node.envelope.attack  = 0.001
+  ch.node.envelope.decay   = clamp((8 - (id % 8)) / 8, 0.01, 0.9)
+  ch.node.envelope.sustain = clamp((id % 4) / 4,       0.01, 0.9)
+  ch.node.envelope.release = clamp((id % 6) / 6,       0.01, 0.9)
+}
+
+// ── UI ────────────────────────────────────────────────────────────────────────
+const channelsEl = document.getElementById('channels')
+const effectsEl  = document.getElementById('effects')
+
+function buildUI(fxOrder) {
+  for (let i = 0; i < CHANNEL_DEFS.length; i++) {
+    const ch = channels[i]
+    const el = document.createElement('div')
+    el.className = 'channel'
+    el.innerHTML = `
+      <div class="ch-id">${str36(i).toUpperCase()}</div>
+      <div class="ch-note">—</div>
+      <div class="ch-env">
+        <span class="env-label">A</span><div class="env-bar"><div class="env-bar-fill"></div></div>
+        <span class="env-label">D</span><div class="env-bar"><div class="env-bar-fill"></div></div>
+        <span class="env-label">S</span><div class="env-bar"><div class="env-bar-fill"></div></div>
+        <span class="env-label">R</span><div class="env-bar"><div class="env-bar-fill"></div></div>
+      </div>
+      <div class="ch-type">${CHANNEL_DEFS[i].type}</div>
+      <div class="ch-wave"><canvas class="wave" width="200" height="24"></canvas></div>
+    `
+    channelsEl.appendChild(el)
+    ch.el        = el
+    ch.noteEl    = el.querySelector('.ch-note')
+    ch.envBars   = [...el.querySelectorAll('.env-bar-fill')]
+    ch.canvas    = el.querySelector('canvas.wave')
+    ch.canvasCtx = ch.canvas.getContext('2d')
+    updateEnvBars(ch)
+    startWaveLoop(ch)
+  }
+
+  for (const id of fxOrder) {
+    const el = document.createElement('div')
+    el.className = 'effect'
+    el.innerHTML = `
+      <div class="effect-header">
+        <span class="effect-id">${id}</span>
+        <span class="effect-val" id="fxval-${id}">00</span>
+      </div>
+      <div class="effect-bars">
+        <div class="effect-bar" title="wet"><div class="effect-bar-fill" id="fxwet-${id}" style="width:0%"></div></div>
+        <div class="effect-bar" title="value"><div class="effect-bar-fill" id="fxamt-${id}" style="width:0%"></div></div>
+      </div>
+    `
+    effectsEl.appendChild(el)
+  }
+}
+
+function updateEnvBars(ch) {
+  if (!ch.node.envelope) return
+  const { attack, decay, sustain, release } = ch.node.envelope
+  ;[attack, decay, sustain, release].forEach((v, i) => {
+    ch.envBars[i].style.height = `${Math.round(v * 100)}%`
+  })
+}
+
+function startWaveLoop(ch) {
+  const ctx = ch.canvasCtx, w = ch.canvas.width, h = ch.canvas.height
+  function draw() {
+    requestAnimationFrame(draw)
+    ctx.clearRect(0, 0, w, h)
+    const playing = ch.lastNote && (performance.now() - ch.lastNote < 800)
+    if (!ch.waveform || !playing) {
+      ctx.beginPath(); ctx.strokeStyle = '#333'; ctx.lineWidth = 1
+      ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke()
+      return
+    }
+    const vals = ch.waveform.getValue()
+    ctx.beginPath(); ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 1.5
+    ctx.moveTo(0, ((vals[0] + 1) / 2) * h)
+    for (let i = 1; i < vals.length; i++) {
+      if (i % 4 !== 0) continue
+      ctx.lineTo((i / vals.length) * w, clamp(((vals[i] + 1) / 2) * h, 1, h - 1))
+    }
+    ctx.stroke()
+  }
+  draw()
+}
+
+// ── MIDI ──────────────────────────────────────────────────────────────────────
+const activeNotes = {}
+let midiAccess    = null
+let selectedInput = null  // the currently active MIDIInput object
+
+function noteOn(midiCh, midiNote, velocity) {
+  const idx = midiCh - 1
+  if (idx < 0 || idx >= channels.length) return
+  const ch   = channels[idx]
+  const name = midiToName(midiNote)
+  const vel  = velocity / 127
+  try {
+    ch.node.triggerAttack(name, Tone.now(), vel)
+    ch.lastNote = performance.now()
+    ch.el.classList.add('playing')
+    ch.noteEl.textContent = name
+    activeNotes[`${midiCh}-${midiNote}`] = { ch, name }
+    log(`♪ ch${midiCh} ${name} vel=${velocity}`, 'note')
+  } catch(e) {
+    log(`✖ ch${midiCh} ${name}: ${e.message}`, 'err')
+  }
+}
+
+function noteOff(midiCh, midiNote) {
+  const active = activeNotes[`${midiCh}-${midiNote}`]
+  if (!active) return
+  try {
+    active.ch.node.triggerRelease(Tone.now())
+    setTimeout(() => {
+      try { active.ch.node.triggerAttack('C3', Tone.now(), 0.0001) } catch(e) {}
+    }, 0)
+    active.ch.el.classList.remove('playing')
+    delete activeNotes[`${midiCh}-${midiNote}`]
+  } catch(e) {}
+}
+
+function onMidiMessage({ data }) {
+  const [status, note, vel] = data
+  const type = status & 0xf0
+  const ch   = (status & 0x0f) + 1
+  if (type === 0x90 && vel > 0)                           noteOn(ch, note, vel)
+  else if (type === 0x80 || (type === 0x90 && vel === 0)) noteOff(ch, note)
+}
+
+function selectMidiInput(id) {
+  if (!midiAccess) return
+
+  // Detach all first
+  for (const input of midiAccess.inputs.values()) {
+    input.onmidimessage = null
+  }
+  selectedInput = null
+
+  if (!id) return
+
+  if (id === 'omni') {
+    // Listen to every input
+    for (const input of midiAccess.inputs.values()) {
+      input.onmidimessage = onMidiMessage
+    }
+    log('MIDI → OMNI (all inputs)', 'sys')
+  } else {
+    const input = midiAccess.inputs.get(id)
+    if (!input) return
+    input.onmidimessage = onMidiMessage
+    selectedInput = input
+    log(`MIDI → ${input.name}`, 'sys')
+  }
+}
+
+function populateMidiSelects(inputs) {
+  const options = '<option value="omni">★ OMNI (all inputs)</option>'
+  + inputs.map(i => `<option value="${i.id}">${i.name}</option>`).join('')
+  const fallback = '<option value="">— none —</option>'
+
+  for (const sel of [
+    document.getElementById('midi-select-overlay'),
+    document.getElementById('midi-select-header'),
+  ]) {
+    const prev = sel.value
+    sel.innerHTML = inputs.length ? options : fallback
+    // Restore previous selection if still available
+    if (inputs.find(i => i.id === prev)) sel.value = prev
+  }
+}
+
+async function initMIDI(preferredId = null) {
+  try {
+    midiAccess = await navigator.requestMIDIAccess()
+
+    function scanInputs() {
+      const inputs = [...midiAccess.inputs.values()]
+      populateMidiSelects(inputs)
+
+      // Auto-select: prefer the previously chosen id, else first device
+      const target = preferredId && (preferredId === 'omni' || inputs.find(i => i.id === preferredId))
+  ? preferredId
+  : 'omni'  // default to omni instead of first device
+
+      for (const sel of [
+        document.getElementById('midi-select-overlay'),
+        document.getElementById('midi-select-header'),
+      ]) {
+        if (target) sel.value = target
+      }
+
+      selectMidiInput(target)
+    }
+
+    scanInputs()
+    midiAccess.onstatechange = scanInputs
+
+  } catch(e) {
+    log(`MIDI error: ${e.message}`, 'err')
+    for (const sel of [
+      document.getElementById('midi-select-overlay'),
+      document.getElementById('midi-select-header'),
+    ]) {
+      sel.innerHTML = '<option value="">unavailable</option>'
+    }
+  }
+}
+
+// ── WebSocket / UDP ───────────────────────────────────────────────────────────
+const wsIndicator = document.getElementById('ws-indicator')
+let   ws          = null
+
+function connectWS() {
+  ws = new WebSocket(`ws://${location.host}`)
+
+  ws.onopen = () => {
+    wsIndicator.textContent = 'bridge: connected'
+    wsIndicator.className   = 'ok'
+  }
+  ws.onclose = () => {
+    wsIndicator.textContent = 'bridge: disconnected'
+    wsIndicator.className   = 'err'
+    setTimeout(connectWS, 2000)
+  }
+  ws.onerror = () => {
+    wsIndicator.textContent = 'bridge: error'
+    wsIndicator.className   = 'err'
+  }
+  ws.onmessage = ({ data }) => {
+    // Control messages arrive as JSON, audio messages as plain strings
+    try {
+      const msg = JSON.parse(data)
+      if (msg.type === 'udp-port') {
+        document.getElementById('udp-port-header').value  = msg.port
+        document.getElementById('udp-port-overlay').value = msg.port
+        wsIndicator.textContent = `bridge: connected · udp:${msg.port}`
+        log(`UDP port: ${msg.port}`, 'sys')
+      } else if (msg.type === 'udp-error') {
+        log(`UDP error: ${msg.message}`, 'err')
+      }
+    } catch {
+      // Not JSON → it's a UDP audio message
+      handleUDP(data.toString().trim())
+    }
+  }
+}
+
+function sendUDPPortChange(port) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'set-udp-port', port }))
+  }
+}
+
+// ── UDP message handler ───────────────────────────────────────────────────────
+function handleUDP(msg) {
+  if (msg.includes(';')) { msg.split(';').forEach(handleUDP); return }
+  const sub = msg.substring(1, 4).toLowerCase()
+  const fx3 = msg.substring(0, 3).toLowerCase()
+
+  if (sub === 'env') {
+    applyEnv(msg)
+  } else if (effectChain[fx3]) {
+    applyEffect(fx3, msg.substring(3))
+  } else if (fx3 === 'bpm') {
+    const bpm = parseInt(msg.substring(3))
+    if (bpm >= 30) { Tone.Transport.bpm.rampTo(bpm, 4); log(`BPM → ${bpm}`, 'sys') }
+  }
+}
+
+function applyEffect(code, val) {
+  if (!val || val.length < 1) return
+  const wet   = int36(val[0]) / 15
+  const value = val.length > 1 ? int36(val[1]) / 15 : 0
+  const fx = effectChain[code]
+  if (!fx) return
+  if (fx.wet) fx.wet.value = wet
+  if (!isNaN(value)) {
+    if      (code === 'rev') fx.roomSize.value = value
+    else if (code === 'dis') fx.distortion = value
+    else if (code === 'bit') fx.bits = clamp(parseInt(value * 8), 1, 8)
+    else if (code === 'cho') fx.depth = value
+    else if (code === 'fee') fx.delayTime.value = value
+    else if (code === 'tre') fx.depth.value = value
+    else if (code === 'vib') fx.depth.value = value
+    else if (code === 'pha') fx.octaves = clamp(parseInt(value * 3), 0, 8)
+    else if (code === 'wah') fx.octaves = clamp(parseInt(value * 6), 0, 8)
+    else if (code === 'che') fx.order = clamp(parseInt(value * 100), 1, 100)
+    else if (code === 'vol') fx.volume.value = (value * 40) - 20
+  }
+  const wetBar = document.getElementById(`fxwet-${code}`)
+  const amtBar = document.getElementById(`fxamt-${code}`)
+  const valEl  = document.getElementById(`fxval-${code}`)
+  if (wetBar) wetBar.style.width = `${wet * 100}%`
+  if (amtBar) amtBar.style.width = `${value * 100}%`
+  if (valEl)  valEl.textContent  = `${str36(wet * 15)}${str36(value * 15)}`
+  log(`fx ${code.toUpperCase()} wet=${str36(wet*15)} val=${str36(value*15)}`, 'fx')
+}
+
+function applyEnv(msg) {
+  const chIdx = int36(msg[0])
+  const val   = msg.substring(4)
+  if (chIdx < 0 || chIdx >= channels.length) return
+  const ch = channels[chIdx]
+  if (!ch.node.envelope) return
+  if (val.length > 0) ch.node.envelope.attack  = clamp(int36(val[0]) / 15, 0.001, 1.0)
+  if (val.length > 1) ch.node.envelope.decay   = clamp(int36(val[1]) / 15, 0.01,  1.0)
+  if (val.length > 2) ch.node.envelope.sustain = clamp(int36(val[2]) / 15, 0.01,  1.0)
+  if (val.length > 3) ch.node.envelope.release = clamp(int36(val[3]) / 15, 0.01,  1.0)
+  updateEnvBars(ch)
+  log(`env ch${chIdx} a=${val[0]||'?'} d=${val[1]||'?'} s=${val[2]||'?'} r=${val[3]||'?'}`, 'sys')
+}
+
+// ── Wire up controls ──────────────────────────────────────────────────────────
+
+// MIDI selects — keep both in sync, apply immediately
+for (const selId of ['midi-select-overlay', 'midi-select-header']) {
+  document.getElementById(selId).addEventListener('change', (e) => {
+    const id = e.target.value
+    // Sync the other select
+    const other = selId === 'midi-select-overlay' ? 'midi-select-header' : 'midi-select-overlay'
+    document.getElementById(other).value = id
+    selectMidiInput(id)
+  })
+}
+
+// UDP port — apply button in header
+document.getElementById('udp-apply').addEventListener('click', () => {
+  const port = parseInt(document.getElementById('udp-port-header').value)
+  if (port > 1024 && port < 65535) {
+    sendUDPPortChange(port)
+    log(`Requesting UDP port ${port}…`, 'sys')
+  }
+})
+
+// Keep overlay UDP input in sync with header input
+document.getElementById('udp-port-overlay').addEventListener('change', (e) => {
+  document.getElementById('udp-port-header').value = e.target.value
+})
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', async () => {
+  const btn        = document.getElementById('start-btn')
+  const loadingMsg = document.getElementById('loading-msg')
+  btn.disabled     = true
+  btn.textContent  = 'LOADING…'
+
+  const chosenMidi = document.getElementById('midi-select-overlay').value
+  const chosenPort = parseInt(document.getElementById('udp-port-overlay').value)
+
+  await Tone.start()
+  Tone.context.latencyHint = 'interactive'
+  Tone.context.lookAhead   = 0.01
+  Tone.Transport.start()
+
+  const fxOrder = buildEffects()
+
+  loadingMsg.textContent = 'building synths…'
+  for (let i = 0; i < CHANNEL_DEFS.length; i++) {
+    const node     = CHANNEL_DEFS[i].node()
+    const waveform = new Tone.Waveform(256)
+    node.fan(waveform)
+    node.connect(effectChain.bit)
+    channels.push({ node, type: CHANNEL_DEFS[i].type, waveform, lastNote: null, el: null })
+    applyDefaultEnv(channels[i], i)
+  }
+
+  loadingMsg.textContent = 'warming up synths…'
+  for (let i = 0; i < channels.length; i++) {
+    try { channels[i].node.triggerAttack('C3', Tone.now(), 0.0001) } catch(e) {}
+  }
+  await new Promise(r => setTimeout(r, 200))
+
+  loadingMsg.textContent = 'warming up effects…'
+  for (const fx of Object.values(effectChain)) {
+    if (fx.wet) fx.wet.value = 0.0001
+  }
+  await new Promise(r => setTimeout(r, 200))
+  for (const fx of Object.values(effectChain)) {
+    if (fx.wet) fx.wet.value = 0
+  }
+
+  buildUI(fxOrder)
+  document.getElementById('overlay').style.display = 'none'
+
+  // Init MIDI with the device chosen on the overlay
+  await initMIDI(chosenMidi || null)
+
+  // Connect WebSocket, then request the chosen UDP port if different from default
+  connectWS()
+  if (chosenPort && chosenPort !== 49161) {
+    setTimeout(() => sendUDPPortChange(chosenPort), 500)
+  }
+
+  log('MiniPilot ready', 'sys')
+})
+
+// Pre-scan MIDI inputs before START is clicked so the overlay dropdown is populated
+;(async () => {
+  try {
+    const access = await navigator.requestMIDIAccess()
+    const inputs  = [...access.inputs.values()]
+    populateMidiSelects(inputs)
+    access.onstatechange = () => populateMidiSelects([...access.inputs.values()])
+  } catch {}
+})()
+</script>
+</body>
+</html>

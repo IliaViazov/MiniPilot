@@ -1,0 +1,16 @@
+{
+  "name": "minipilot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.0.5",
+    "electron": "^33.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
