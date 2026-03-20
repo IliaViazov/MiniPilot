@@ -15,3 +15,8 @@ Desktop version to build:
 npm install @electron/packager --save-dev
 npx electron-packager . MiniPilot --platform=darwin --arch=arm64
 ```
+
+P.s. You may receive an error "the application is damaged", due to the MacOS quarantine restrictions. To remove it you just need to run:
+```bash
+xattr -cr <path>/MiniPilot.app
+```
